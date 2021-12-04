@@ -143,11 +143,11 @@ def my_adaboost_reg(Y_train, X_train, X_test, mean, std, Y_test, M=20, weak_clf=
     for i in range(M):
         # 训练一个基学习器
         weak_clf.fit(X_train, Y_train, sample_weight=w)
-        pred_train_i = weak_clf.predict(X_train)# 获得n_train个预测值
+        pred_train_i = weak_clf.predict(X_train)  # 获得n_train个预测值
         pred_test_i = weak_clf.predict(X_test)
 
         # 获取相对误差
-        tempList = [abs(pred_train_i[i] - Y_train[i]) for i in range(0,len(pred_train_i))]
+        tempList = [abs(pred_train_i[i] - Y_train[i]) for i in range(0, len(pred_train_i))]
         down = np.max(tempList)
         miss = []
         for i in range(len(pred_train_i)):
@@ -156,7 +156,7 @@ def my_adaboost_reg(Y_train, X_train, X_test, mean, std, Y_test, M=20, weak_clf=
         # 误差率
         err_m = np.dot(w, miss)
         # 权重系数
-        alpha_m = err_m/(1-err_m)
+        alpha_m = err_m / (1 - err_m)
 
         # New weights
         Z = np.dot(w, alpha_m)
@@ -165,11 +165,18 @@ def my_adaboost_reg(Y_train, X_train, X_test, mean, std, Y_test, M=20, weak_clf=
     final = weak_clf.predict(X_test)
     for i in range(len(final)):
         final[i] = final[i] * std[i] + mean[i]
-    plt.plot(final,label='prediction')
+    plt.plot(final, label='prediction')
     plt.plot(Y_test, label='real')
     plt.grid()
     plt.title('AdaBoost prediction')
+    plt.legend()
     plt.show()
+    Ada_RMSE = math.sqrt(mean_squared_error(Y_test, final))
+    Ada_MAPE = get_mape(Y_test, final)
+    print("AdaBoost RMSE on dev set = %0.3f" % Ada_RMSE)
+    print("Adaoost MAPE on dev set = %0.3f%%" % Ada_MAPE)
+
+    return Ada_RMSE, Ada_MAPE
 
 
 if __name__ == '__main__':
@@ -221,7 +228,7 @@ if __name__ == '__main__':
                           axis=1)  # 对测试集每一行进行标准化，调用函数scale_row
         testScaled = pd.concat([testScaled, temp], axis=1)
 
-    # 第六步：建立样本
+    # 建立样本
     features = []
     for i in range(1, N + 1):
         features.append("adj_close_" + str(i))
@@ -238,8 +245,11 @@ if __name__ == '__main__':
     yTrainScaled = trainScaled[target]
     xSampleScaled = testScaled[features]
 
-    # 第七步：开始训练
-    my_adaboost_reg(yTrainScaled, xTrainScaled, xSampleScaled, test['adj_close_mean'].values, test['adj_close_std'].values, test['adj_close'].values)
+    # --------------------------------开始训练--------------------------------
+
+    ada_rmse, ada_mape = my_adaboost_reg(yTrainScaled, xTrainScaled, xSampleScaled, test['adj_close_mean'].values,
+                                         test['adj_close_std'].values, test['adj_close'].values)
+
     # 使用GridSearchCV进行参数微调
 
     parameters = {'n_estimators': [90],
@@ -275,9 +285,43 @@ if __name__ == '__main__':
     plt.title('XGBoost prediction')
     plt.show()
 
-    #进行RMSE评估
+    # 进行RMSE评估
     RMSE = math.sqrt(mean_squared_error(ySample, test['pre_y']))
-    print("RMSE on dev set = %0.3f" % RMSE)
+    print("XGBoost RMSE on dev set = %0.3f" % RMSE)
     MAPE = get_mape(ySample, test['pre_y'])
-    print("MAPE on dev set = %0.3f%%" % MAPE)
+    print("XGBoost MAPE on dev set = %0.3f%%" % MAPE)
 
+# 官方AdaBoost 回归
+    from sklearn.ensemble import AdaBoostRegressor
+    clf = AdaBoostRegressor(DecisionTreeRegressor(max_depth=1), n_estimators=20)
+    clf.fit(xTrainScaled, yTrainScaled)
+    pre = clf.predict(xSampleScaled)
+    test['ada_prey_scaled'] = pre
+    test['ada_prey'] = test['ada_prey_scaled'] * test['adj_close_std'] + test['adj_close_mean']
+    of_ada_rmse = math.sqrt(mean_squared_error(ySample, test['ada_prey']))
+    of_ada_mape = get_mape(ySample, test['ada_prey'])
+    print("Official AdaBoost RMSE on dev set = %0.3f" % of_ada_rmse)
+    print("Official AdaBoost MAPE on dev set = %0.3f" % of_ada_mape)
+
+
+    plt.figure()
+    ax = test.plot(x='date', y='adj_close', style='g-', grid=True)
+    ax = test.plot(x='date', y='ada_prey', style='y-', grid=True, ax=ax)
+    plt.title('Official AdaBoost prediction')
+    plt.show()
+
+# 评价可视化
+    name = ['RMSE', 'MAPE']
+    Len = list(range(2))
+    total_with, n = 0.4, 2
+    width = total_with / n
+    plt.bar(Len, [RMSE, MAPE], width=width, label='XGBoost', fc='y')
+    for i in range(len(Len)):
+        Len[i] = Len[i] + width
+    plt.bar(Len, [ada_rmse, ada_mape], width=width, tick_label=name, label='AdaBoost', fc='b')
+    for i in range(len(Len)):
+        Len[i] = Len[i] + width
+    plt.bar(Len, [of_ada_rmse, of_ada_mape], width=width, label='OfficalAdaBoost', fc='r')
+    plt.legend()
+    plt.title('Comparison chart of two regression evaluations')
+    plt.show()
