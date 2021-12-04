@@ -100,32 +100,26 @@ def scale_row(line, feat_mean, feat_std):
 
 def get_mov_avg_std(df, col, N):
     '''
-
     Args:
         df: 传入的数据集
         col: 想要计算标准差和均值的行名称
         N: 获取前几天的数据进行均值和标准差
-
     Returns:
         包含标准差和均值的数据集
     '''
-
     # 通过rolling(N).mean()获得前 N->0 个数据的平均值等
     # 但是第一行会产生数据NaN，因为0是NaN
     mean_list = df[col].rolling(window=N, min_periods=1).mean()
     std_list = df[col].rolling(window=N, min_periods=1).std()
-
     # 属性装入
     df_out = df.copy()
     df_out[col + '_mean'] = mean_list
     df_out[col + '_std'] = std_list
-
     return df_out
 
 
-def my_adaboost_reg(Y_train, X_train, X_test, mean, std, Y_test, M=20, weak_clf=DecisionTreeRegressor(max_depth=1)):
+def simp_adaboost_reg(Y_train, X_train, X_test, mean, std, Y_test, M=20, weak_clf=DecisionTreeRegressor(max_depth=1)):
     '''
-
     :param Y_train: 训练集的标签
     :param X_train: 训练集
     :param Y_test: 测试集的标签
@@ -163,13 +157,16 @@ def my_adaboost_reg(Y_train, X_train, X_test, mean, std, Y_test, M=20, weak_clf=
         w = np.multiply(w, alpha_m / Z)
     weak_clf.fit(X_train, Y_train, sample_weight=w)
     final = weak_clf.predict(X_test)
+    #还原数据
     for i in range(len(final)):
         final[i] = final[i] * std[i] + mean[i]
+    # 可视化操作
     plt.plot(final, label='prediction')
     plt.plot(Y_test, label='real')
     plt.grid()
-    plt.title('AdaBoost prediction')
+    plt.title('Simp-AdaBoost prediction')
     plt.legend()
+    plt.savefig('./AdaBoost.jpg')
     plt.show()
     Ada_RMSE = math.sqrt(mean_squared_error(Y_test, final))
     Ada_MAPE = get_mape(Y_test, final)
@@ -247,7 +244,7 @@ if __name__ == '__main__':
 
     # --------------------------------开始训练--------------------------------
 
-    ada_rmse, ada_mape = my_adaboost_reg(yTrainScaled, xTrainScaled, xSampleScaled, test['adj_close_mean'].values,
+    ada_rmse, ada_mape = simp_adaboost_reg(yTrainScaled, xTrainScaled, xSampleScaled, test['adj_close_mean'].values,
                                          test['adj_close_std'].values, test['adj_close'].values)
 
     # 使用GridSearchCV进行参数微调
@@ -283,6 +280,7 @@ if __name__ == '__main__':
     ax = test.plot(x='date', y='adj_close', style='b-', grid=True)
     ax = test.plot(x='date', y='pre_y', style='r-', grid=True, ax=ax)
     plt.title('XGBoost prediction')
+    plt.savefig('./XGBoost.jpg')
     plt.show()
 
     # 进行RMSE评估
@@ -308,6 +306,7 @@ if __name__ == '__main__':
     ax = test.plot(x='date', y='adj_close', style='g-', grid=True)
     ax = test.plot(x='date', y='ada_prey', style='y-', grid=True, ax=ax)
     plt.title('Official AdaBoost prediction')
+    plt.savefig('./OfficialAdaBoost.jpg')
     plt.show()
 
 # 评价可视化
@@ -318,10 +317,11 @@ if __name__ == '__main__':
     plt.bar(Len, [RMSE, MAPE], width=width, label='XGBoost', fc='y')
     for i in range(len(Len)):
         Len[i] = Len[i] + width
-    plt.bar(Len, [ada_rmse, ada_mape], width=width, tick_label=name, label='AdaBoost', fc='b')
+    plt.bar(Len, [ada_rmse, ada_mape], width=width, tick_label=name, label='Simp-AdaBoost', fc='b')
     for i in range(len(Len)):
         Len[i] = Len[i] + width
     plt.bar(Len, [of_ada_rmse, of_ada_mape], width=width, label='OfficalAdaBoost', fc='r')
     plt.legend()
     plt.title('Comparison chart of two regression evaluations')
+    plt.savefig('./Comparison.jpg')
     plt.show()
